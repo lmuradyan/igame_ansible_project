@@ -1,0 +1,34 @@
+---
+- name: Deploy Prometheus, Loki, and Grafana with Docker Compose
+  hosts: server2
+  become: yes
+
+  vars:
+    prometheus_config: /etc/prometheus/prometheus.yml
+    docker_compose_file: /etc/docker-compose.yml
+
+  tasks:
+    - name: Create Prometheus configuration directory
+      file:
+        path: /etc/prometheus
+        state: directory
+
+    - name: Create an empty Prometheus configuration file (to avoid Docker mounting issues)
+      copy:
+        content: ''
+        dest: "{{ prometheus_config }}"
+
+    - name: Copy Prometheus configuration file
+      template:
+        src: templates/prometheus.yml.j2
+        dest: "{{ prometheus_config }}"
+        mode: '0644'
+
+    - name: Copy Docker Compose file
+      template:
+        src: templates/docker-compose.yml.j2
+        dest: "{{ docker_compose_file }}"
+        mode: '0644'
+
+    - name: Run Docker Compose up
+      shell: /usr/local/bin/docker-compose -f {{ docker_compose_file }} up -d

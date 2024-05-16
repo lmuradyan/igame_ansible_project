@@ -1,0 +1,234 @@
+---
+- name: Install and configure Grafana Agent and Exporters
+  hosts: server3
+  become: yes
+
+  vars:
+    grafana_agent_version: "v0.33.1"
+    grafana_agent_url: "https://github.com/grafana/agent/releases/download/{{ grafana_agent_version }}/grafana-agent-linux-amd64.zip"
+    grafana_agent_config: /etc/grafana-agent.yaml
+    nginx_exporter_config: /etc/nginx/nginx_exporter.conf
+    redis_exporter_port: 9121
+    mysql_exporter_port: 9104
+    clickhouse_exporter_port: 9116
+
+  tasks:
+    - name: Update apt package index
+      apt:
+        update_cache: yes
+
+    - name: Install dependencies
+      apt:
+        name: unzip
+        state: present
+
+    - name: Install Grafana Agent
+      get_url:
+        url: "{{ grafana_agent_url }}"
+        dest: /tmp/grafana-agent-linux-amd64.zip
+
+    - name: Unzip Grafana Agent
+      unarchive:
+        src: /tmp/grafana-agent-linux-amd64.zip
+        dest: /usr/local/bin/
+        remote_src: yes
+      notify:
+        - Enable and start Grafana Agent service
+
+    - name: Create Grafana Agent configuration directory
+      file:
+        path: /etc/grafana-agent
+        state: directory
+
+    - name: Configure Grafana Agent
+      template:
+        src: templates/grafana-agent.yaml.j2
+        dest: "{{ grafana_agent_config }}"
+        mode: '0644'
+      notify:
+        - Reload Grafana Agent service
+
+    - name: Check if NGINX is installed
+      command: nginx -v
+      ignore_errors: yes
+      register: nginx_installed
+
+    - name: Install NGINX Exporter
+      when: nginx_installed.rc == 0
+      get_url:
+        url: https://github.com/nginxinc/nginx-prometheus-exporter/releases/download/v0.8.0/nginx-prometheus-exporter-0.8.0-linux-amd64.tar.gz
+        dest: /tmp/nginx-prometheus-exporter.tar.gz
+
+    - name: Extract NGINX Exporter
+      when: nginx_installed.rc == 0
+      unarchive:
+        src: /tmp/nginx-prometheus-exporter.tar.gz
+        dest: /usr/local/bin/
+        remote_src: yes
+
+    - name: Create NGINX Exporter systemd service
+      when: nginx_installed.rc == 0
+      copy:
+        content: |
+          [Unit]
+          Description=NGINX Prometheus Exporter
+          After=network.target
+
+          [Service]
+          Type=simple
+          ExecStart=/usr/local/bin/nginx-prometheus-exporter -nginx.scrape-uri http://localhost/nginx_status
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/nginx-prometheus-exporter.service
+        mode: '0644'
+      notify:
+        - Enable and start NGINX Exporter service
+
+    - name: Check if Redis is installed
+      command: redis-server --version
+      ignore_errors: yes
+      register: redis_installed
+
+    - name: Install Redis Exporter
+      when: redis_installed.rc == 0
+      get_url:
+        url: https://github.com/oliver006/redis_exporter/releases/download/v1.30.0/redis_exporter-v1.30.0.linux-amd64.tar.gz
+        dest: /tmp/redis_exporter.tar.gz
+
+    - name: Extract Redis Exporter
+      when: redis_installed.rc == 0
+      unarchive:
+        src: /tmp/redis_exporter.tar.gz
+        dest: /usr/local/bin/
+        remote_src: yes
+
+    - name: Create Redis Exporter systemd service
+      when: redis_installed.rc == 0
+      copy:
+        content: |
+          [Unit]
+          Description=Redis Exporter
+          After=network.target
+
+          [Service]
+          Type=simple
+          ExecStart=/usr/local/bin/redis_exporter -redis.addr redis://localhost:6379
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/redis_exporter.service
+        mode: '0644'
+      notify:
+        - Enable and start Redis Exporter service
+
+    - name: Check if MySQL is installed
+      command: mysql --version
+      ignore_errors: yes
+      register: mysql_installed
+
+    - name: Install MySQL Exporter
+      when: mysql_installed.rc == 0
+      get_url:
+        url: https://github.com/prometheus/mysqld_exporter/releases/download/v0.12.1/mysqld_exporter-0.12.1.linux-amd64.tar.gz
+        dest: /tmp/mysqld_exporter.tar.gz
+
+    - name: Extract MySQL Exporter
+      when: mysql_installed.rc == 0
+      unarchive:
+        src: /tmp/mysqld_exporter.tar.gz
+        dest: /usr/local/bin/
+        remote_src: yes
+
+    - name: Create MySQL Exporter systemd service
+      when: mysql_installed.rc == 0
+      copy:
+        content: |
+          [Unit]
+          Description=MySQL Exporter
+          After=network.target
+
+          [Service]
+          Type=simple
+          Environment="DATA_SOURCE_NAME=root:password@(localhost:3306)/"
+          ExecStart=/usr/local/bin/mysqld_exporter
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/mysqld_exporter.service
+        mode: '0644'
+      notify:
+        - Enable and start MySQL Exporter service
+
+    - name: Check if ClickHouse is installed
+      command: clickhouse-client --version
+      ignore_errors: yes
+      register: clickhouse_installed
+
+    - name: Install ClickHouse Exporter
+      when: clickhouse_installed.rc == 0
+      get_url:
+        url: https://github.com/ClickHouse/clickhouse_exporter/releases/download/v0.10.0/clickhouse_exporter-0.10.0.linux-amd64.tar.gz
+        dest: /tmp/clickhouse_exporter.tar.gz
+
+    - name: Extract ClickHouse Exporter
+      when: clickhouse_installed.rc == 0
+      unarchive:
+        src: /tmp/clickhouse_exporter.tar.gz
+        dest: /usr/local/bin/
+        remote_src: yes
+
+    - name: Create ClickHouse Exporter systemd service
+      when: clickhouse_installed.rc == 0
+      copy:
+        content: |
+          [Unit]
+          Description=ClickHouse Exporter
+          After=network.target
+
+          [Service]
+          Type=simple
+          ExecStart=/usr/local/bin/clickhouse_exporter
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/clickhouse_exporter.service
+        mode: '0644'
+      notify:
+        - Enable and start ClickHouse Exporter service
+
+  handlers:
+    - name: Enable and start Grafana Agent service
+      systemd:
+        name: grafana-agent
+        enabled: yes
+        state: started
+
+    - name: Reload Grafana Agent service
+      systemd:
+        name: grafana-agent
+        state: restarted
+
+    - name: Enable and start NGINX Exporter service
+      systemd:
+        name: nginx-prometheus-exporter
+        enabled: yes
+        state: started
+
+    - name: Enable and start Redis Exporter service
+      systemd:
+        name: redis_exporter
+        enabled: yes
+        state: started
+
+    - name: Enable and start MySQL Exporter service
+      systemd:
+        name: mysqld_exporter
+        enabled: yes
+        state: started
+
+    - name: Enable and start ClickHouse Exporter service
+      systemd:
+        name: clickhouse_exporter
+        enabled: yes
+        state: started
