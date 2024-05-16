@@ -4,7 +4,7 @@ Assumptions
 The sceme will be following:
 server1 - Ansible
 server2 - Prometeus+Loki+Graphana
-server3 - services
+server3 - services (nginx, redis, mysql, clickhouse)
 
 
 Prepare Ansible server
