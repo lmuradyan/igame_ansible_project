@@ -61,18 +61,31 @@
 
     - name: Create directories for data storage
       file:
-        path: "{{ item }}"
+        path: "{{ item.path }}"
         state: directory
-        mode: '0755'
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+        mode: "{{ item.mode }}"
       loop:
-        - /var/lib/prometheus
-        - /var/lib/loki
-        - /var/lib/grafana
+        - { path: /var/lib/prometheus, owner: '65534', group: '65534', mode: '0755' } # Prometheus runs as nobody (UID 65534)
+        - { path: /var/lib/loki, owner: '10001', group: '10001', mode: '0755' } # Loki runs as loki (UID 10001)
+        - { path: /var/lib/grafana, owner: '472', group: '472', mode: '0775' } # Grafana runs as grafana (UID 472)
+
+    - name: Set ownership and permissions for Prometheus config directory
+      file:
+        path: /etc/prometheus
+        state: directory
+        owner: '65534'
+        group: '65534'
+        mode: '0755'
 
     - name: Copy Prometheus configuration file
       template:
         src: templates/prometheus.yml.j2
         dest: "{{ prometheus_config }}"
+        owner: '65534'
+        group: '65534'
+        mode: '0644'
 
     - name: Copy Docker Compose file
       template:
