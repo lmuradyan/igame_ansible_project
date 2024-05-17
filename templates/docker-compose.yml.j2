@@ -1,26 +1,30 @@
-version: '3.8'
+version: '3.7'
 
 services:
   prometheus:
     image: prom/prometheus:latest
     volumes:
       - /etc/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - /var/lib/prometheus:/prometheus
     ports:
       - "9090:9090"
+    restart: unless-stopped
 
   loki:
     image: grafana/loki:latest
+    volumes:
+      - /var/lib/loki:/loki
     ports:
       - "3100:3100"
+    restart: unless-stopped
+    command: -config.file=/etc/loki/local-config.yaml
 
   grafana:
     image: grafana/grafana:latest
     volumes:
-      - grafana-data:/var/lib/grafana
+      - /var/lib/grafana:/var/lib/grafana
     ports:
       - "3000:3000"
+    restart: unless-stopped
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
-
-volumes:
-  grafana-data:
